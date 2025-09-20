@@ -1,15 +1,11 @@
 ﻿#include <iostream>
-#include <string>
-#include <map>
 #include <vector>
-#include <unordered_map>
-#include <array>
 #include <set>
-#include <cctype>
 #include <deque>
+#include <algorithm>
+#include <unordered_map>
 
 using namespace std;
-
 
 struct Packet {
     int source;
@@ -30,6 +26,7 @@ struct Packet {
 class Router {
     deque<Packet> data;
     set<Packet> compare;
+    unordered_map<int, vector<int>> destinationTimestamps; // 每个目的地的时间戳列表
     const int maxSize;
 
 public:
@@ -42,11 +39,15 @@ public:
         }
         compare.insert(packet);
         data.push_back(packet);
+        destinationTimestamps[destination].push_back(timestamp); // 添加到目的地时间戳列表
 
         if (data.size() > maxSize) {
             Packet oldest = data.front();
             data.pop_front();
             compare.erase(oldest);
+            // 从目的地时间戳列表中移除最旧的时间戳
+            auto& timestamps = destinationTimestamps[oldest.destination];
+            timestamps.erase(timestamps.begin());
         }
         return true;
     }
@@ -58,35 +59,27 @@ public:
         Packet packet = data.front();
         data.pop_front();
         compare.erase(packet);
+        // 从目的地时间戳列表中移除最旧的时间戳
+        auto& timestamps = destinationTimestamps[packet.destination];
+        timestamps.erase(timestamps.begin());
         return { packet.source, packet.destination, packet.timestamp };
     }
 
     int getCount(int destination, int startTime, int endTime) {
-        if (data.empty()) {
+        if (destinationTimestamps.find(destination) == destinationTimestamps.end()) {
             return 0;
         }
 
-        auto cmp = [](const Packet& p, int value) {
-            return p.timestamp < value;
-            };
-
-        auto it_start = lower_bound(data.begin(), data.end(), startTime, cmp);
-        auto it_end = lower_bound(data.begin(), data.end(), endTime + 1, cmp);
-
-        int count = 0;
-        for (auto it = it_start; it != it_end; ++it) {
-            if (it->destination == destination) {
-                count++;
-            }
+        const auto& timestamps = destinationTimestamps[destination];
+        if (timestamps.empty()) {
+            return 0;
         }
-        return count;
+
+        // 使用二分查找确定时间范围
+        auto start_it = lower_bound(timestamps.begin(), timestamps.end(), startTime);
+        auto end_it = upper_bound(timestamps.begin(), timestamps.end(), endTime);
+
+        // 直接返回范围内的数据包数量
+        return end_it - start_it;
     }
 };
-
-/**
- * Your Router object will be instantiated and called as such:
- * Router* obj = new Router(memoryLimit);
- * bool param_1 = obj->addPacket(source,destination,timestamp);
- * vector<int> param_2 = obj->forwardPacket();
- * int param_3 = obj->getCount(destination,startTime,endTime);
- */
