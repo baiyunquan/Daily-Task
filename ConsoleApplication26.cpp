@@ -1,106 +1,92 @@
 ﻿#include <iostream>
 #include <string>
+#include <map>
 #include <vector>
 #include <unordered_map>
 #include <array>
+#include <set>
 #include <cctype>
+#include <deque>
 
 using namespace std;
 
-class Solution {
-public:
-    int strStr(string haystack, string needle) {
-        vector<int> nextVal{};
-        nextVal.resize(needle.size() + 1);
 
-        nextVal[0] = -1;
-        int j = 0, k = -1;
+struct Packet {
+    int source;
+    int destination;
+    int timestamp;
 
-        while (j < needle.size()) {
-            if (k == -1) {
-                j++, k++;
-                nextVal[j] = k;
-            }
-            else {
-                if (needle[j] == needle[k]) {
-                    j++, k++;
-                    if (needle[k] == needle[j]) {
-                        nextVal[j] = nextVal[k];
-                    }
-                    else {
-                        nextVal[j] = k;
-                    }
+    Packet(int source, int destination, int timestamp)
+        : source(source), destination(destination), timestamp(timestamp) {
+    }
 
-                }
-                else {
-                    k = nextVal[k];
-                }
-            }
-        }
-
-        int ptr1 = 0, ptr2 = 0;
-        while (ptr1 < haystack.size() && ptr2 < needle.size()) {
-            if (haystack[ptr1] == needle[ptr2]) {
-                ptr1++, ptr2++;
-            }
-            else {
-                ptr2 = nextVal[ptr2];
-                if (ptr2 < 0) {
-                    ptr2 = 0;
-                    ptr1++;
-                }
-            }
-        }
-
-        return ptr1 - needle.size();
+    bool operator<(const Packet& other) const {
+        if (source != other.source) return source < other.source;
+        if (destination != other.destination) return destination < other.destination;
+        return timestamp < other.timestamp;
     }
 };
 
-int main() {
-    string haystack{"aaaaaaaaaaaaaaaaabaaaa"}, needle{"aaaaab"};
+class Router {
+    deque<Packet> data;
+    set<Packet> compare;
+    const int maxSize;
 
-    vector<int> nextVal{};
-    nextVal.resize(needle.size() + 1);
+public:
+    Router(int memoryLimit) : maxSize(memoryLimit) {}
 
-    nextVal[0] = -1;
-    int j = 0, k = -1;
-
-    while (j < needle.size()) {
-        if (k == -1) {
-            j++, k++;
-            nextVal[j] = k;
+    bool addPacket(int source, int destination, int timestamp) {
+        Packet packet(source, destination, timestamp);
+        if (compare.find(packet) != compare.end()) {
+            return false;
         }
-        else {
-            if (needle[j] == needle[k]) {
-                j++, k++;
-                if (needle[k] == needle[j]) {
-                    nextVal[j] = nextVal[k];
-                }
-                else {
-                    nextVal[j] = k;
-                }
-                
-            }
-            else {
-                k = nextVal[k];
-            }
+        compare.insert(packet);
+        data.push_back(packet);
+
+        if (data.size() > maxSize) {
+            Packet oldest = data.front();
+            data.pop_front();
+            compare.erase(oldest);
         }
+        return true;
     }
 
-    int ptr1 = 0, ptr2 = 0;
-    while (ptr1 < haystack.size() && ptr2 < needle.size()) {
-        if (haystack[ptr1] == needle[ptr2]) {
-            ptr1++, ptr2++;
+    vector<int> forwardPacket() {
+        if (data.empty()) {
+            return {};
         }
-        else {
-            ptr2 = nextVal[ptr2];
-            if (ptr2 < 0) {
-                ptr2 = 0;
-                ptr1++;
+        Packet packet = data.front();
+        data.pop_front();
+        compare.erase(packet);
+        return { packet.source, packet.destination, packet.timestamp };
+    }
+
+    int getCount(int destination, int startTime, int endTime) {
+        if (data.empty()) {
+            return 0;
+        }
+
+        auto cmp = [](const Packet& p, int value) {
+            return p.timestamp < value;
+            };
+
+        auto it_start = lower_bound(data.begin(), data.end(), startTime, cmp);
+        auto it_end = lower_bound(data.begin(), data.end(), endTime + 1, cmp);
+
+        int count = 0;
+        for (auto it = it_start; it != it_end; ++it) {
+            if (it->destination == destination) {
+                count++;
             }
         }
+        return count;
     }
-    
-    cout << haystack.substr(ptr1 - needle.size() , needle.size()) << endl;
-    return 0;
-}
+};
+
+/**
+ * Your Router object will be instantiated and called as such:
+ * Router* obj = new Router(memoryLimit);
+ * bool param_1 = obj->addPacket(source,destination,timestamp);
+ * vector<int> param_2 = obj->forwardPacket();
+ * int param_3 = obj->getCount(destination,startTime,endTime);
+ */
