@@ -1,85 +1,100 @@
 ﻿#include <iostream>
 #include <vector>
 #include <set>
+#include <map>
 #include <deque>
 #include <algorithm>
 #include <unordered_map>
+#include <memory>
+#include <tuple>
 
 using namespace std;
 
-struct Packet {
-    int source;
-    int destination;
-    int timestamp;
+class MovieRentingSystem {
+private:
+    // 存储 shop -> movie -> price 的映射
+    unordered_map<int, unordered_map<int, int>> priceMap;
 
-    Packet(int source, int destination, int timestamp)
-        : source(source), destination(destination), timestamp(timestamp) {
-    }
+    // 按电影ID索引的可用电影集合，存储 (price, shop)
+    unordered_map<int, set<pair<int, int>>> availableMovies;
 
-    bool operator<(const Packet& other) const {
-        if (source != other.source) return source < other.source;
-        if (destination != other.destination) return destination < other.destination;
-        return timestamp < other.timestamp;
-    }
-};
-
-class Router {
-    deque<Packet> data;
-    set<Packet> compare;
-    unordered_map<int, vector<int>> destinationTimestamps; // 每个目的地的时间戳列表
-    const int maxSize;
+    // 已出租电影集合，存储 (price, shop, movie)
+    set<tuple<int, int, int>> rentedMovies;
 
 public:
-    Router(int memoryLimit) : maxSize(memoryLimit) {}
-
-    bool addPacket(int source, int destination, int timestamp) {
-        Packet packet(source, destination, timestamp);
-        if (compare.find(packet) != compare.end()) {
-            return false;
+    MovieRentingSystem(int n, vector<vector<int>>& entries) {
+        for (const auto& entry : entries) {
+            int shop = entry[0], movie = entry[1], price = entry[2];
+            priceMap[shop][movie] = price;
+            availableMovies[movie].emplace(price, shop);
         }
-        compare.insert(packet);
-        data.push_back(packet);
-        destinationTimestamps[destination].push_back(timestamp); // 添加到目的地时间戳列表
-
-        if (data.size() > maxSize) {
-            Packet oldest = data.front();
-            data.pop_front();
-            compare.erase(oldest);
-            // 从目的地时间戳列表中移除最旧的时间戳
-            auto& timestamps = destinationTimestamps[oldest.destination];
-            timestamps.erase(timestamps.begin());
-        }
-        return true;
     }
 
-    vector<int> forwardPacket() {
-        if (data.empty()) {
-            return {};
+    vector<int> search(int movie) {
+        vector<int> result;
+        if (availableMovies.find(movie) == availableMovies.end())
+            return result;
+
+        auto& movieSet = availableMovies[movie];
+        int count = 0;
+        for (auto it = movieSet.begin(); it != movieSet.end() && count < 5; ++it, ++count) {
+            result.push_back(it->second);
         }
-        Packet packet = data.front();
-        data.pop_front();
-        compare.erase(packet);
-        // 从目的地时间戳列表中移除最旧的时间戳
-        auto& timestamps = destinationTimestamps[packet.destination];
-        timestamps.erase(timestamps.begin());
-        return { packet.source, packet.destination, packet.timestamp };
+        return result;
     }
 
-    int getCount(int destination, int startTime, int endTime) {
-        if (destinationTimestamps.find(destination) == destinationTimestamps.end()) {
-            return 0;
+    void rent(int shop, int movie) {
+        // 检查电影是否可用
+        if (priceMap.find(shop) == priceMap.end() ||
+            priceMap[shop].find(movie) == priceMap[shop].end()) {
+            return;
         }
 
-        const auto& timestamps = destinationTimestamps[destination];
-        if (timestamps.empty()) {
-            return 0;
+        // 获取价格
+        int price = priceMap[shop][movie];
+
+        // 从可用电影中移除
+        if (availableMovies.find(movie) != availableMovies.end()) {
+            availableMovies[movie].erase({ price, shop });
+
+            // 如果集合为空，移除电影条目
+            if (availableMovies[movie].empty()) {
+                availableMovies.erase(movie);
+            }
         }
 
-        // 使用二分查找确定时间范围
-        auto start_it = lower_bound(timestamps.begin(), timestamps.end(), startTime);
-        auto end_it = upper_bound(timestamps.begin(), timestamps.end(), endTime);
+        // 添加到已出租集合
+        rentedMovies.emplace(price, shop, movie);
+    }
 
-        // 直接返回范围内的数据包数量
-        return end_it - start_it;
+    void drop(int shop, int movie) {
+        // 检查电影是否已出租
+        if (priceMap.find(shop) == priceMap.end() ||
+            priceMap[shop].find(movie) == priceMap[shop].end()) {
+            return;
+        }
+
+        // 获取价格
+        int price = priceMap[shop][movie];
+
+        // 从已出租集合中移除
+        auto it = rentedMovies.find({ price, shop, movie });
+        if (it != rentedMovies.end()) {
+            rentedMovies.erase(it);
+        }
+
+        // 添加回可用电影集合
+        availableMovies[movie].emplace(price, shop);
+    }
+
+    vector<vector<int>> report() {
+        vector<vector<int>> result;
+        int count = 0;
+        for (const auto& movie : rentedMovies) {
+            if (count >= 5) break;
+            result.push_back({ get<1>(movie), get<2>(movie) });
+            count++;
+        }
+        return result;
     }
 };
